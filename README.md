@@ -1,1 +1,0 @@
-# spindle_vibration_anomaly
