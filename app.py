@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -53,5 +54,3 @@ st.line_chart(df[['Vibration_X', 'Vibration_Y', 'Vibration_Z']])
 # Final table
 st.subheader("📄 Full Dataset with Anomaly Labels")
 st.dataframe(df, use_container_width=True)
-
-
