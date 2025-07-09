@@ -1,49 +1,72 @@
 
 import streamlit as st
-import numpy as np
 import pandas as pd
+import joblib
+import os
 import time
+from sklearn.ensemble import IsolationForest
 
-from model import AnomalyDetector
+st.set_page_config(page_title="Spindle Vibration Anomaly Detection", layout="wide")
 
-st.set_page_config(page_title="Real-Time Vibration Monitoring", layout="wide")
-st.title("📈 Real-Time Spindle Vibration Anomaly Detection with CSV Upload")
+st.title("🛠️ Spindle Vibration Anomaly Detection")
+st.markdown("Early detection of abnormal vibration patterns in heavy milling machines using AI.")
 
-uploaded_file = st.file_uploader("📂 Upload Vibration CSV File", type=["csv"])
+# Sidebar
+st.sidebar.header("📂 Upload Vibration CSV")
+uploaded_file = st.sidebar.file_uploader("Choose a CSV file", type="csv")
+
+st.sidebar.markdown("⚠️ CSV must contain: `Vibration_X`, `Vibration_Y`, `Vibration_Z`")
+
+# Load default or uploaded data
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    if 'Vibration' not in df.columns:
-        st.error("CSV must contain a 'Vibration' column.")
-    else:
-        vibration_data = df['Vibration'].values
-        total_points = len(vibration_data)
-        time_data = df[df.columns[0]].values
-
-        # Train model on first 500 (assume normal)
-        model = AnomalyDetector()
-        model.fit(vibration_data[:500])
-
-        chart = st.empty()
-        anomaly_placeholder = st.empty()
-
-        window_size = 50
-        detected_count = 0
-
-        for i in range(500, total_points):
-            window_signal = vibration_data[i-window_size:i]
-            anomaly_flags = model.predict(window_signal)
-            is_anomaly = anomaly_flags[-1] == 1
-
-            chart.line_chart({"Vibration": window_signal})
-
-            if is_anomaly:
-                detected_count += 1
-                anomaly_placeholder.warning(f"⚠️ Anomaly Detected at t={i}", icon="⚠️")
-            else:
-                anomaly_placeholder.success(f"No Anomaly at t={i}")
-
-            time.sleep(0.2)
-
-        st.success(f"✅ Real-Time Monitoring Complete. Total Anomalies: {detected_count}")
+    st.success("✅ Custom data uploaded successfully!")
 else:
-    st.info("Please upload a CSV file with vibration data to begin.")
+    df = pd.read_csv("vibration_logs.csv")
+    st.info("ℹ️ Using default sample data (vibration_logs.csv)")
+
+# Features
+X = df[['Vibration_X', 'Vibration_Y', 'Vibration_Z']]
+
+# Train or load model
+if not os.path.exists("model.pkl"):
+    st.warning("Training model (no saved model found)...")
+    model = IsolationForest(contamination=0.1, random_state=42)
+    model.fit(X)
+    joblib.dump(model, "model.pkl")
+    st.success("Model trained and saved as model.pkl!")
+else:
+    model = joblib.load("model.pkl")
+
+# Add placeholder for real-time anomaly table
+placeholder = st.empty()
+
+# Real-time simulation
+st.subheader("⏱️ Real-Time Vibration Monitoring (Simulated)")
+with placeholder.container():
+    for i in range(len(df)):
+        single_row = df.iloc[:i+1].copy()
+        single_row['Anomaly'] = model.predict(single_row[['Vibration_X', 'Vibration_Y', 'Vibration_Z']])
+        single_row['Anomaly'] = single_row['Anomaly'].map({1: '✅ Normal', -1: '🚨 Anomaly'})
+
+        st.line_chart(single_row[['Vibration_X', 'Vibration_Y', 'Vibration_Z']])
+        st.dataframe(single_row.tail(5), use_container_width=True)
+        time.sleep(0.3)
+        if i == len(df) - 1:
+            st.success("🔍 Real-time simulation complete.")
+        placeholder.empty()
+
+# Full anomaly detection summary
+df['Anomaly'] = model.predict(X)
+df['Anomaly'] = df['Anomaly'].map({1: '✅ Normal', -1: '🚨 Anomaly'})
+
+st.subheader("📋 Anomaly Summary")
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("✅ Normal", df['Anomaly'].value_counts().get('✅ Normal', 0))
+with col2:
+    st.metric("🚨 Anomaly", df['Anomaly'].value_counts().get('🚨 Anomaly', 0))
+
+st.subheader("📈 Full Vibration Dataset with Anomaly Detection")
+st.dataframe(df, use_container_width=True)
+
